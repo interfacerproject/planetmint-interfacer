@@ -1,0 +1,73 @@
+---
+- name: create non root user
+  hosts: all
+  remote_user: root
+  tasks:
+  - name: Add the user 'app'
+    ansible.builtin.user:
+      name: app
+      shell: /bin/bash
+
+- name: install planetmint
+  hosts: all
+  remote_user: root
+  become_user: app
+  become_method: su
+  vars:
+    planetmint: "./.local/bin/planetmint"
+    tendermint_url: "https://github.com/tendermint/tendermint/releases/download/v0.34.15/"
+    tendermint_archive: "tendermint_0.34.15_linux_amd64.tar.gz"
+  tasks:
+  - name: Update and upgrade apt packages
+    apt:
+      upgrade: yes
+      update_cache: yes
+      cache_valid_time: 86400 #One day
+
+  - name: install package dependencies
+    ansible.builtin.package:
+      name:
+       - python3
+       - python3-pip
+       - python3-dev
+       - libssl-dev
+       - nginx
+       - curl
+      state: latest
+
+  - name: Install pip
+    become: true
+    ansible.builtin.pip:
+      name: pip
+      state: latest
+
+  - name: Install planetmint
+    become: true
+    ansible.builtin.pip:
+      name: planetmint
+      state: latest
+
+  - name: Add python packages to PATH
+    ansible.builtin.lineinfile:
+      path: /home/app/.bashrc
+      line: "PATH=$PATH:$HOME/.local/bin"
+
+  - name: Install tarantool
+    shell: "curl -L https://tarantool.io/release/2/installer.sh | bash"
+
+  - name: install package dependencies
+    ansible.builtin.package:
+      name:
+       - tarantool
+      state: latest
+
+  - name: download tendermint
+    get_url:
+      url: "{{ tendermint_url }}{{ tendermint_archive }}"
+      dest: /home/app
+
+  - name: Decompress tendermint
+    unarchive:
+      remote_src: yes
+      src: /home/app/{{ tendermint_archive }}
+      dest: /home/app
