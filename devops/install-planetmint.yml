@@ -61,6 +61,37 @@
        - tarantool
       state: latest
 
+  - name: copy instance init script
+    get_url:
+      url: "https://raw.githubusercontent.com/planetmint/planetmint/main/planetmint/backend/tarantool/basic.lua"
+      dest: /etc/tarantool/instances.available/planemint.lua
+
+  - name: delete tarantool example instance
+    ansible.builtin.file:
+      path: /etc/tarantool/instances.available/example.lua
+      state: absent
+
+  - name: create link to enabled instance
+    ansible.builtin.file:
+      src: /etc/tarantool/instances.available/planemint.lua
+      dest: /etc/tarantool/instances.enabled/planemint.lua
+      owner: root
+      group: root
+      state: link
+
+  - name: Reload tarantool service
+    ansible.builtin.systemd:
+      name: tarantool.service
+      daemon_reload: yes
+      state: restarted
+      enabled: yes
+
+  - name: Reload tarantool instance for planetmint
+    ansible.builtin.systemd:
+      name: "tarantool@planetmint.service"
+      state: started
+      enabled: yes
+
   - name: download tendermint
     get_url:
       url: "{{ tendermint_url }}{{ tendermint_archive }}"
