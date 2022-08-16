@@ -1,0 +1,24 @@
+---
+- name: start planetmint
+  hosts: all
+  remote_user: app
+  become_user: root
+  become_method: sudo
+  tasks:
+  - name: Stop planetmint service
+    become: true
+    ansible.builtin.systemd:
+      name: planetmint.service
+      state: stopped
+      enabled: yes
+
+  - name: Stop tendermint service
+    become: true
+    ansible.builtin.systemd:
+      name: tendermint.service
+      state: stopped
+      enabled: yes
+
+  - name: Drop data
+    command: "/home/app/planetmint-venv/bin/planetmint -y drop"
+

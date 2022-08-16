@@ -1,0 +1,21 @@
+---
+- name: start planetmint
+  hosts: all
+  remote_user: app
+  become_user: root
+  become_method: sudo
+  tasks:
+  - name: Start planetmint service
+    become: true
+    ansible.builtin.systemd:
+      name: planetmint.service
+      state: restarted
+      enabled: yes
+
+  - name: Start tendermint service
+    become: true
+    ansible.builtin.systemd:
+      name: tendermint.service
+      state: restarted
+      enabled: yes
+

@@ -16,6 +16,11 @@
       line: '%wheel ALL=(ALL) NOPASSWD: ALL'
       validate: 'visudo -cf %s'
 
+  - name: Add the user 'app'
+    ansible.builtin.user:
+      name: app
+      groups: wheel
+      shell: /bin/bash
 ## This method would be better but doesn't work
 #  - name: Set authorized key for user app
 #    ansible.posix.authorized_key:
@@ -26,19 +31,14 @@
     file:
       path: /home/app/.ssh
       state: directory
-      owner: app
-      group: app
   - name: Set authorized keys for user app
     copy:
       src: /root/.ssh/authorized_keys
       remote_src: true
       dest: /home/app/.ssh/authorized_keys
+      owner: app
+      group: app
 
-  - name: Add the user 'app'
-    ansible.builtin.user:
-      name: app
-      groups: wheel
-      shell: /bin/bash
 
 - name: install planetmint
   hosts: all
@@ -216,14 +216,10 @@
     become: true
     ansible.builtin.systemd:
       name: planetmint.service
-      daemon_reload: yes
-      state: restarted
       enabled: yes
 
   - name: Reload tendermint service
     become: true
     ansible.builtin.systemd:
       name: tendermint.service
-      daemon_reload: yes
-      state: restarted
       enabled: yes

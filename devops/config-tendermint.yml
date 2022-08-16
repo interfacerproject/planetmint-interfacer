@@ -1,0 +1,70 @@
+---
+- name: Create genesis
+  hosts: all
+  remote_user: app
+  become_user: root
+  become_method: sudo
+  tasks:
+  - name: Remove directory 'identities'
+    file:
+      path: identities
+      state: absent
+    delegate_to: localhost
+    ignore_errors: yes
+
+  - name: Fetch identities
+    fetch:
+      src: "/home/app/.tendermint/config/priv_validator_key.json"
+      dest: "identities/{{ inventory_hostname }}={{ name }}/key"
+      flat: yes
+
+  - name: Fetch IDs
+    command: "tendermint show-node-id"
+    register: node_id
+
+  - name: Dump IDs to file
+    copy:
+      content: "{{ node_id.stdout }}"
+      dest: "identities/{{ inventory_hostname }}={{ name }}/id"
+    delegate_to: localhost
+
+  - name: Join identities
+    command: /bin/bash join_identities.sh
+    register: identities_out
+    delegate_to: localhost
+    run_once: true
+
+  - name: Define validators list
+    ansible.builtin.set_fact:
+      identities: "{{ identities_out.stdout | from_json }}"
+
+  - debug:
+      msg: "{{ identities }}"
+    delegate_to: localhost
+    run_once: true
+
+  - name: Define validators list
+    ansible.builtin.set_fact:
+      validators: "{{ identities.validators | to_nice_json }}"
+      persistent_peers: "{{ identities.persistent_peers | to_nice_json }}"
+
+  - debug:
+      msg: "{{ persistent_peers }}"
+    delegate_to: localhost
+    run_once: true
+
+  - name: Upload tendermint config
+    ansible.builtin.template:
+      src: testnet/config.yaml.j2
+      dest: /home/app/.tendermint/config/config.yaml
+      owner: app
+      group: app
+      mode: '0600'
+
+  - name: Upload genesis file
+    ansible.builtin.template:
+      src: testnet/genesis.json.j2
+      dest: /home/app/.tendermint/config/genesis.json
+      owner: app
+      group: app
+      mode: '0600'

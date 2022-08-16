@@ -1,6 +1,6 @@
 box.cfg{listen = 3303}
 box.schema.user.grant('guest','read,write,execute,create,drop','universe',
-                      {if_not_exists=true})
+                      nil, {if_not_exists=true})
 
 
 function indexed_pattern_search(space_name, field_no, pattern)
