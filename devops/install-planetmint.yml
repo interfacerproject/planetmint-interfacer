@@ -3,33 +3,69 @@
   hosts: all
   remote_user: root
   tasks:
+  - name: Make sure we have a 'wheel' group
+    group:
+      name: wheel
+      state: present
+
+  - name: Allow 'wheel' group to have passwordless sudo
+    lineinfile:
+      dest: /etc/sudoers
+      state: present
+      regexp: '^%wheel'
+      line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+      validate: 'visudo -cf %s'
+
+## This method would be better but doesn't work
+#  - name: Set authorized key for user app
+#    ansible.posix.authorized_key:
+#      user: app
+#      state: present
+#      key: "files/sshkey.pub"
+  - name: Create .ssh directory
+    file:
+      path: /home/app/.ssh
+      state: directory
+      owner: app
+      group: app
+  - name: Set authorized keys for user app
+    copy:
+      src: /root/.ssh/authorized_keys
+      remote_src: true
+      dest: /home/app/.ssh/authorized_keys
+
   - name: Add the user 'app'
     ansible.builtin.user:
       name: app
+      groups: wheel
       shell: /bin/bash
 
 - name: install planetmint
   hosts: all
-  remote_user: root
-  become_user: app
-  become_method: su
+  remote_user: app
+  become_user: root
+  become_method: sudo
   vars:
     planetmint: "./.local/bin/planetmint"
     tendermint_url: "https://github.com/tendermint/tendermint/releases/download/v0.34.15/"
     tendermint_archive: "tendermint_0.34.15_linux_amd64.tar.gz"
+
   tasks:
   - name: Update and upgrade apt packages
+    become: true
     apt:
       upgrade: yes
       update_cache: yes
-      cache_valid_time: 86400 #One day
+      cache_valid_time: 86400 # One day
 
   - name: install package dependencies
+    become: true
     ansible.builtin.package:
       name:
        - python3
        - python3-pip
        - python3-dev
+       - python3-virtualenv
        - libssl-dev
        - nginx
        - curl
@@ -40,46 +76,59 @@
     ansible.builtin.pip:
       name: pip
       state: latest
+      virtualenv: /home/app/planetmint-venv
 
   - name: Install planetmint
     become: true
     ansible.builtin.pip:
       name: planetmint
       state: latest
+      virtualenv: /home/app/planetmint-venv
 
-  - name: Add python packages to PATH
-    ansible.builtin.lineinfile:
-      path: /home/app/.bashrc
-      line: "PATH=$PATH:$HOME/.local/bin"
+  - name: copy planetmint config script
+    become: true
+    copy:
+      src: .planetmint
+      dest: /home/app/.planetmint
+#  - name: Add python packages to PATH
+#    ansible.builtin.lineinfile:
+#     path: /home/app/.bashrc
+#     line: "PATH=$PATH:$HOME/.local/bin"
 
   - name: Install tarantool
+    become: true
     shell: "curl -L https://tarantool.io/release/2/installer.sh | bash"
 
   - name: install package dependencies
+    become: true
     ansible.builtin.package:
       name:
        - tarantool
       state: latest
 
   - name: copy instance init script
-    get_url:
-      url: "https://raw.githubusercontent.com/planetmint/planetmint/main/planetmint/backend/tarantool/basic.lua"
-      dest: /etc/tarantool/instances.available/planemint.lua
+    become: true
+    copy:
+      src: basic.lua
+      dest: /etc/tarantool/instances.available/planetmint.lua
 
   - name: delete tarantool example instance
+    become: true
     ansible.builtin.file:
       path: /etc/tarantool/instances.available/example.lua
       state: absent
 
   - name: create link to enabled instance
+    become: true
     ansible.builtin.file:
-      src: /etc/tarantool/instances.available/planemint.lua
-      dest: /etc/tarantool/instances.enabled/planemint.lua
+      src: /etc/tarantool/instances.available/planetmint.lua
+      dest: /etc/tarantool/instances.enabled/planetmint.lua
       owner: root
       group: root
       state: link
 
   - name: Reload tarantool service
+    become: true
     ansible.builtin.systemd:
       name: tarantool.service
       daemon_reload: yes
@@ -87,6 +136,7 @@
       enabled: yes
 
   - name: Reload tarantool instance for planetmint
+    become: true
     ansible.builtin.systemd:
       name: "tarantool@planetmint.service"
       state: started
@@ -102,3 +152,78 @@
       remote_src: yes
       src: /home/app/{{ tendermint_archive }}
       dest: /home/app
+
+  - name: Install tendermint
+    become: true
+    copy:
+      src: /home/app/tendermint
+      remote_src: true
+      dest: /usr/local/bin/
+      mode: 755
+
+  - name: Tendermint init
+    command: "/usr/local/bin/tendermint init"
+    args:
+      creates: /home/app/.tendermint
+
+  - name: create planetmint service config
+    become: true
+    ansible.builtin.blockinfile:
+      path: /etc/systemd/system/planetmint.service
+      create: true
+      block: |
+        ##planetmint.service
+        [Unit]
+        Description=Planetmint. The blockchain database.
+        Documentation=https://docs.planetmint.io
+        After=tendermint.service
+
+        [Service]
+        ExecStart=/home/app/planetmint-venv/bin/planetmint start
+        WorkingDirectory=/home/app
+        User=app
+        Group=app
+
+        [Install]
+        WantedBy=multi-user.target
+
+  - name: create tendermint service config
+    become: true
+    blockinfile:
+      create: true
+      path: /etc/systemd/system/tendermint.service
+      block: |
+        ## tendermint.service
+        [Unit]
+        Description=Tendermint. Byzantine-fault tolerant state machine replication.
+        Documentation=https://tendermint.readthedocs.io/en/master/
+
+        [Service]
+        ExecStart=/usr/local/bin/tendermint node \
+                           --p2p.laddr "tcp://0.0.0.0:26656" \
+                           --proxy_app="tcp://127.0.0.1:26658" \
+                           --rpc.laddr="tcp://0.0.0.0:26657" \
+                           --consensus.create_empty_blocks=false \
+                           --p2p.pex=false
+        WorkingDirectory=/home/app
+        User=app
+        Group=app
+
+        [Install]
+        WantedBy=multi-user.target
+
+  - name: Reload planetmint service
+    become: true
+    ansible.builtin.systemd:
+      name: planetmint.service
+      daemon_reload: yes
+      state: restarted
+      enabled: yes
+
+  - name: Reload tendermint service
+    become: true
+    ansible.builtin.systemd:
+      name: tendermint.service
+      daemon_reload: yes
+      state: restarted
+      enabled: yes
