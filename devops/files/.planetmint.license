@@ -1,4 +1,3 @@
-{#
 SPDX-License-Identifier: AGPL-3.0-or-later
 Copyright (C) 2022-2023 Dyne.org foundation <foundation@dyne.org>.
 
@@ -14,30 +13,3 @@ GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
-#}
-
-{
-  "genesis_time": "2022-05-03T18:51:29.602821953Z",
-  "chain_id": "DYNE-TESTNET",
-  "initial_height": "0",
-  "consensus_params": {
-    "block": {
-      "max_bytes": "22020096",
-      "max_gas": "-1",
-      "time_iota_ms": "1000"
-    },
-    "evidence": {
-      "max_age_num_blocks": "100000",
-      "max_age_duration": "172800000000000",
-      "max_bytes": "1048576"
-    },
-    "validator": {
-      "pub_key_types": [
-        "ed25519"
-      ]
-    },
-    "version": {}
-  },
-  "validators": {{ validators }},
-  "app_hash": ""
-}

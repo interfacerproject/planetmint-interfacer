@@ -14,24 +14,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
----
-- name: start planetmint
-  hosts: all
-  remote_user: app
-  become_user: root
-  become_method: sudo
-  tasks:
-  - name: Start planetmint service
-    become: true
-    ansible.builtin.systemd:
-      name: planetmint.service
-      state: restarted
-      enabled: yes
-
-  - name: Start tendermint service
-    become: true
-    ansible.builtin.systemd:
-      name: tendermint.service
-      state: restarted
-      enabled: yes
-
+[submodule ".reuse"]
+	path = .reuse
+	url = https://github.com/interfacerproject/reuse
